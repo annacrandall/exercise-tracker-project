@@ -3,6 +3,7 @@ const app = express()
 const cors = require('cors')
 const mongoose = require('mongoose'); 
 const bodyParser = require('body-parser'); 
+const moment = require('moment');
 require('dotenv').config()
 // set up packages 
 
@@ -23,7 +24,7 @@ const Schema = mongoose.Schema;
 const exerciseSchema = new Schema({
   description: {type: String, required: true},
   duration: {type: Number, required: true}, 
-  date: String
+  date: {type: String}
 })
 // create schema for exercise 
 const userSchema = new Schema({
@@ -58,40 +59,18 @@ app.get('/api/users', (req, res) => {
 }); 
 
 const getDate = (date) => {
-  const d = new Date().toLocaleString();
-}
+  if (!date) {
+    return new Date().toDateString();
+  }
+  const correctDate = new Date();
+  const dateString = date.split("-");
+  correctDate.setFullYear(dateString[0]);
+  correctDate.setDate(dateString[2]);
+  correctDate.setMonth(dateString[1] - 1);
 
-app.get("/api/users/:_id/logs", (req, res) => {
-  User.findById(req.params._id).then((result) => {
-    let resObj = result;
+  return correctDate.toDateString();
+};
 
-    if (req.query.from || req.query.to) {
-      let fromDate = new Date(0);
-      let toDate = new Date();
-
-      if (req.query.from) {
-        fromDate = new Date(req.query.from);
-      }
-      
-      if (req.query.to) {
-        toDate = new Date(req.query.to);
-      }
-
-      fromDate = fromDate.getTime();
-      toDate = toDate.getTime();
-
-      resObj.log = resObj.log.filter((session) => {
-        let sessionDate = new Date(session.date).getTime();
-        return sessionDate >= fromDate && sessionDate <= toDate;
-      });
-    }
-    if (req.query.limit) {
-      resObj.log = resObj.log.slice(0, req.query.limit);
-    }
-    resObj["count"] = result.log.length;
-    res.json(resObj);
-  });
-});
 
 app.post("/api/users/:_id/exercises", async (req, res) => {
   const { description, duration, date } = req.body;
@@ -121,9 +100,54 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
     .catch(error => res.status(400).send(error));
 });
 
-
-
-
+app.get('/api/users/:_id/logs', (req, res)=> {
+  const {from, to, limit} = req.query;
+  let id = req.params._id;
+  const startDate = moment(from)
+  const endDate = moment(to)
+  let d = startDate
+  User.findById(id, (err, data) => {
+    if(err) return console.log(err);
+    let log = data.log;
+      if(from === undefined || to === undefined){
+        let array = [];
+        for(let i in log){
+          if(array >= limit){break;}
+          let info = {description: log[i]['description'],
+                      duration: log[i]['duration'], 
+                      date: new Date((log[i]['date'])).toDateString()}
+        array.push(info);
+      }
+    res.json({
+    _id: data._id,
+    username: data.username,
+    count:  array.length,
+    log: array
+  });
+  }
+    
+else {    let matches = [];
+  while (+d.toDate() < +endDate.toDate()) {
+    let next_date = (new Date(d).toDateString());
+    d = d.add(1, 'days')
+    for(let i in log){
+      if(log[i]['date'] === next_date){
+        if(matches >= limit){break;}
+        let info = {description: log[i]['description'],
+                      duration: log[i]['duration'], 
+                      date: new Date((log[i]['date'])).toDateString()}
+        matches.push(info);
+      }
+    }
+  }
+  res.json({
+    _id: data._id,
+    username: data.username,
+    count:  matches.length,
+    log: matches
+  });}
+  })
+});
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log('Your app is listening on port ' + listener.address().port)
